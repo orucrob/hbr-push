@@ -14,6 +14,7 @@ There are three functions contained within the directories and a SAM template th
 └── template.yaml               <-- SAM template for Lambda Functions, SQS and DDB
 ```
 
+![aws topology](aws.png)
 
 # Deploying 
 
