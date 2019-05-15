@@ -110,11 +110,11 @@ Resources:
     Type: AWS::DynamoDB::Table
     Properties:
       AttributeDefinitions:
-      - AttributeName: "connectionId"
-        AttributeType: "S"
+        - AttributeName: "connectionId"
+          AttributeType: "S"
       KeySchema:
-      - AttributeName: "connectionId"
-        KeyType: "HASH"
+        - AttributeName: "connectionId"
+          KeyType: "HASH"
       ProvisionedThroughput:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
@@ -132,8 +132,8 @@ Resources:
         Variables:
           TABLE_NAME: !Ref TableName
       Policies:
-      - DynamoDBCrudPolicy:
-          TableName: !Ref TableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableName
   OnConnectPermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -154,8 +154,8 @@ Resources:
         Variables:
           TABLE_NAME: !Ref TableName
       Policies:
-      - DynamoDBCrudPolicy:
-          TableName: !Ref TableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TableName
   OnDisconnectPermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -179,9 +179,6 @@ Resources:
           Properties:
             Queue: !GetAtt PushSqsQueue.Arn
             BatchSize: 10
-      DeadLetterQueue:
-        Type: SQS
-        TargetArn: !GetAtt PushDLQSqsQueue.Arn
       Environment:
         Variables:
           TABLE_NAME: !Ref TableName
@@ -194,11 +191,6 @@ Resources:
           - 'execute-api:ManageConnections'
           Resource:
           - 'arn:aws:execute-api:*:*:*/@connections/*'
-        - Effect: Allow
-          Action:
-          - 'sqs:SendMessage'
-          Resource:
-          - !GetAtt PushDLQSqsQueue.Arn
   SendMessagePermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -221,8 +213,9 @@ Resources:
     Type: AWS::SQS::Queue
     Properties: 
       QueueName: !Sub '${QueueName}-DLQ'
+      MessageRetentionPeriod: 1209600 # = Max - 14 days (default is 345600 - 4 days)
  
-Outputs:
+ Outputs:
   ConnectionsTableArn:
     Description: "Connections table ARN"
     Value: !GetAtt ConnectionsTable.Arn
