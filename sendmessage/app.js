@@ -8,16 +8,15 @@ const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10' });
 
 const { TABLE_NAME } = process.env;
 
-let apigwManagementApi;
+let apigwManagementApi = {};
 const getApi = function (endpoint){
-  if(!apigwManagementApi){
-    //strongly suppose there is just single enpoint (so endpoint in app is all the time the same)
-    apigwManagementApi = new AWS.ApiGatewayManagementApi({
+  if(!apigwManagementApi[endpoint]){
+    apigwManagementApi[endpoint] = new AWS.ApiGatewayManagementApi({
       apiVersion: '2018-11-29',
       endpoint: endpoint
     });
   }
-  return apigwManagementApi;
+  return apigwManagementApi[endpoint];
 }
 
 exports.handler = async (event, context) => {

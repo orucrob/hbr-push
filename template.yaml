@@ -16,6 +16,10 @@ Parameters:
     MaxLength: 50
     AllowedPattern: ^[A-Za-z_]+$
     ConstraintDescription: 'Required. Can be characters and underscore only. No numbers or special characters allowed.'
+  QueueName:
+    Type: String
+    Default: 'push_queue'
+    Description: The name of the new SQS queue 
 
 Resources:
   #API GATEWAY
@@ -122,7 +126,7 @@ Resources:
     Properties:
       CodeUri: onconnect/
       Handler: app.handler
-      MemorySize: 256
+      MemorySize: 128
       Runtime: nodejs8.10
       Environment:
         Variables:
@@ -144,7 +148,7 @@ Resources:
     Properties:
       CodeUri: ondisconnect/
       Handler: app.handler
-      MemorySize: 256
+      MemorySize: 128
       Runtime: nodejs8.10
       Environment:
         Variables:
@@ -166,7 +170,8 @@ Resources:
     Properties:
       CodeUri: sendmessage/
       Handler: app.handler
-      MemorySize: 256
+      MemorySize: 128
+      Timeout: 10
       Runtime: nodejs8.10
       Events:
         MySQSEvent:
@@ -174,6 +179,9 @@ Resources:
           Properties:
             Queue: !GetAtt PushSqsQueue.Arn
             BatchSize: 10
+      DeadLetterQueue:
+        Type: SQS
+        TargetArn: !GetAtt PushDLQSqsQueue.Arn
       Environment:
         Variables:
           TABLE_NAME: !Ref TableName
@@ -186,6 +194,11 @@ Resources:
           - 'execute-api:ManageConnections'
           Resource:
           - 'arn:aws:execute-api:*:*:*/@connections/*'
+        - Effect: Allow
+          Action:
+          - 'sqs:SendMessage'
+          Resource:
+          - !GetAtt PushDLQSqsQueue.Arn
   SendMessagePermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -197,7 +210,18 @@ Resources:
       Principal: apigateway.amazonaws.com
   PushSqsQueue:
     Type: AWS::SQS::Queue
-
+    Properties: 
+      QueueName: !Ref QueueName
+      ReceiveMessageWaitTimeSeconds : 20 #(0-20) Let's save some money, so set to max #Note: There is a initial burst of 5 concurrent function invocations (https://docs.aws.amazon.com/lambda/latest/dg/scaling.html)
+      VisibilityTimeout: 120
+      RedrivePolicy:
+        deadLetterTargetArn : !GetAtt PushDLQSqsQueue.Arn 
+        maxReceiveCount : 10 
+  PushDLQSqsQueue:
+    Type: AWS::SQS::Queue
+    Properties: 
+      QueueName: !Sub '${QueueName}-DLQ'
+ 
 Outputs:
   ConnectionsTableArn:
     Description: "Connections table ARN"
