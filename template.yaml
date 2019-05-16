@@ -22,11 +22,38 @@ Parameters:
     Description: The name of the new SQS queue 
 
 Resources:
+  #API AUTHORIZER
+  PushAuthorizer:
+    Type: 'AWS::ApiGatewayV2::Authorizer'
+    Properties:
+      Name: PushLambdaAuthorizer
+      ApiId: !Ref PushWebSocket
+      AuthorizerType: REQUEST
+      AuthorizerCredentialsArn: !GetAtt PushAuthorizerRole.Arn
+      AuthorizerUri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${AuthorizerFunction.Arn}/invocations 
+      IdentitySource:
+        - route.request.header.Authorization
+
+  #ROLE for authorizer
+  PushAuthorizerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub PushLambdaAuthorizer-Role-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaRole
+
   #API GATEWAY
   PushWebSocket:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: PushWebSocket
+      Name: !Sub PushWebSocket-${AWS::StackName}
       ProtocolType: WEBSOCKET
       RouteSelectionExpression: "$request.body.action"
   ConnectRoute:
@@ -34,7 +61,8 @@ Resources:
     Properties:
       ApiId: !Ref PushWebSocket
       RouteKey: $connect
-      AuthorizationType: NONE
+      AuthorizationType: CUSTOM
+      AuthorizerId: !Ref PushAuthorizer
       OperationName: ConnectRoute
       Target: !Join
         - '/'
@@ -121,6 +149,13 @@ Resources:
       TableName: !Ref TableName
   
   #LAMBDA
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: auth/
+      Handler: app.handler
+      MemorySize: 128
+      Runtime: nodejs8.10
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -215,7 +250,7 @@ Resources:
       QueueName: !Sub '${QueueName}-DLQ'
       MessageRetentionPeriod: 1209600 # = Max - 14 days (default is 345600 - 4 days)
  
- Outputs:
+Outputs:
   ConnectionsTableArn:
     Description: "Connections table ARN"
     Value: !GetAtt ConnectionsTable.Arn
