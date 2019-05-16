@@ -1,6 +1,6 @@
 {
-  "name": "on-disconnect",
-  "version": "1.0.0",
-  "description": "OnDisconnect lambda for WebSockets on API Gateway",
-  "main": "src/app.js"
+    "name": "on-disconnect",
+    "version": "1.0.0",
+    "description": "OnDisconnect lambda for WebSockets on API Gateway",
+    "main": "app.js"
 }

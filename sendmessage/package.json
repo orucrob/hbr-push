@@ -1,6 +1,6 @@
 {
-  "name": "send-message",
-  "version": "1.0.0",
-  "description": "sendMessage lambda for WebSockets on API Gateway",
-  "main": "src/app.js"
+    "name": "send-message",
+    "version": "1.0.0",
+    "description": "sendMessage lambda for WebSockets on API Gateway",
+    "main": "app.js"
 }

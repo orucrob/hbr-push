@@ -1,6 +1,6 @@
 {
-  "name": "on-connect",
-  "version": "1.0.0",
-  "description": "OnConnect lambda for WebSockets on API Gateway",
-  "main": "src/app.js"
+    "name": "on-connect",
+    "version": "1.0.0",
+    "description": "OnConnect lambda for WebSockets on API Gateway",
+    "main": "app.js"
 }
