@@ -1,6 +1,10 @@
 {
     "name": "auth",
     "version": "1.0.0",
-    "description": "Lambda authorizer function for WebSockets on API Gateway",
-    "main": "app.js"
+    "description": "Lambda authorizer function for WebSockets on API Gateway - checking cognito jwt token",
+    "main": "app.js",
+    "dependencies": {
+        "https": "^1.0.0",
+        "node-jose": "^1.1.3"
+    }
 }

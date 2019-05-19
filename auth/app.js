@@ -1,12 +1,15 @@
-exports.handler = function(event, context, callback) {
-    console.log('Received event:', JSON.stringify(event, null, 2))
+var https = require('https')
+var jose = require('node-jose')
 
-    // A simple REQUEST authorizer example to demonstrate how to use request
-    // parameters to allow or deny a request. In this example, a request is
-    // authorized if the client-supplied HeaderAuth1 header, QueryString1 query parameter,
-    // stage variable of StageVar1 and the accountId in the request context all match
-    // specified values of 'headerValue1', 'queryValue1', 'stageValue1', and
-    // '123456789012', respectively.
+var keys_url =
+    'https://cognito-idp.' +
+    (process.env.COGNITO_REGION || process.env.AWS_REGION) +
+    '.amazonaws.com/' +
+    process.env.COGNITO_USERPOOLID +
+    '/.well-known/jwks.json'
+
+exports.handler = async (event, context) => {
+    console.log('Received event:', JSON.stringify(event, null, 2))
 
     // Retrieve request parameters from the Lambda function input:
     var headers = event.headers
@@ -29,10 +32,19 @@ exports.handler = function(event, context, callback) {
     var condition = {}
     condition.IpAddress = {}
 
-    if (headers.Authorization === 'OK') {
-        callback(null, generateAllow('me', event.methodArn))
+    let token = headers.Authorization
+    if (token) {
+        try {
+            let claims = await validateToken(token)
+            let resp = generateAllow(claims.sub, event.methodArn)
+            resp.context = claims
+            return resp
+        } catch (err) {
+            console.log('Token not valid: ' + err)
+            throw new Error('Unauthorized')
+        }
     } else {
-        callback('Unauthorized')
+        throw new Error('Unauthorized')
     }
 }
 
@@ -67,4 +79,73 @@ var generateAllow = function(principalId, resource) {
 
 var generateDeny = function(principalId, resource) {
     return generatePolicy(principalId, 'Deny', resource)
+}
+
+let keysMap = undefined
+
+const getPublicKeys = () => {
+    return new Promise((resolve, reject) => {
+        if (keysMap) {
+            resolve(keysMap)
+        } else {
+            https.get(keys_url, function(response) {
+                if (response.statusCode == 200) {
+                    response.on('data', function(body) {
+                        keysMap = {}
+                        let keys = JSON.parse(body)['keys']
+
+                        // search for the kid in the downloaded public keys
+                        for (var i = 0; i < keys.length; i++) {
+                            keysMap[keys[i].kid] = keys[i]
+                        }
+                        console.log(
+                            'got all public keys:' + JSON.stringify(keysMap)
+                        )
+                        resolve(keysMap)
+                    })
+                } else {
+                    reject('Unable to get keys.')
+                }
+            })
+        }
+    })
+}
+
+const validateToken = async token => {
+    var sections = token.split('.')
+
+    // get the kid from the headers prior to verification
+    var header = jose.util.base64url.decode(sections[0])
+    header = JSON.parse(header)
+    var kid = header.kid
+
+    // download the public keys
+    let keys = await getPublicKeys()
+    let key = keys[kid]
+
+    if (key) {
+        let result = await jose.JWK.asKey(key)
+        let verifyResult = await jose.JWS.createVerify(result).verify(token)
+
+        // now we can use the claims
+        var claims = JSON.parse(verifyResult.payload)
+
+        // additionally we can verify the token expiration
+        var current_ts = Math.floor(new Date() / 1000)
+        if (current_ts > claims.exp) {
+            throw new Error('Token is expired')
+        }
+
+        // and the Audience (use claims.client_id if verifying an access token) if appclient specified
+        if (
+            process.env.COGNITO_APPCLIENT &&
+            claims.aud != process.env.COGNITO_APPCLIENT
+        ) {
+            throw new Error('Token was not issued for this audience')
+        }
+
+        return claims
+    } else {
+        throw new Error('No key for kid.')
+    }
 }

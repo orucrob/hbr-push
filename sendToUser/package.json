@@ -1,0 +1,6 @@
+{
+    "name": "send-to-user",
+    "version": "1.0.0",
+    "description": "send message to user - lambda for WebSockets on API Gateway",
+    "main": "app.js"
+}

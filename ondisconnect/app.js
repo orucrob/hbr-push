@@ -10,12 +10,17 @@ exports.handler = function(event, context, callback) {
         }
     }
 
-    DDB.deleteItem(deleteParams, function(err) {
-        callback(null, {
-            statusCode: err ? 500 : 200,
-            body: err
-                ? 'Failed to disconnect: ' + JSON.stringify(err)
-                : 'Disconnected.'
-        })
-    })
+    try {
+        await DDB.deleteItem(deleteParams).promise()
+        return {
+            statusCode: 200,
+            body: 'Disconnected.'
+        }
+    } catch (err) {
+        console.log('Failed to disconnect:' + err)
+        return {
+            statusCode: 500,
+            body: 'Failed to disconnect: ' + JSON.stringify(err)
+        }
+    }
 }

@@ -97,31 +97,10 @@ Resources:
       IntegrationUri: 
         Fn::Sub:
             arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OnDisconnectFunction.Arn}/invocations
-  SendRoute:
-    Type: AWS::ApiGatewayV2::Route
-    Properties:
-      ApiId: !Ref PushWebSocket
-      RouteKey: sendMessage
-      AuthorizationType: NONE
-      OperationName: SendRoute
-      Target: !Join
-        - '/'
-        - - 'integrations'
-          - !Ref SendInteg
-  SendInteg:
-    Type: AWS::ApiGatewayV2::Integration
-    Properties:
-      ApiId: !Ref PushWebSocket
-      Description: Send Integration
-      IntegrationType: AWS_PROXY
-      IntegrationUri: 
-        Fn::Sub:
-            arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SendMessageFunction.Arn}/invocations
   Deployment:
     Type: AWS::ApiGatewayV2::Deployment
     DependsOn:
     - ConnectRoute
-    - SendRoute
     - DisconnectRoute
     Properties:
       ApiId: !Ref PushWebSocket
@@ -140,22 +119,32 @@ Resources:
       AttributeDefinitions:
         - AttributeName: "connectionId"
           AttributeType: "S"
+        - AttributeName: 'userId'
+          AttributeType: 'S'
       KeySchema:
         - AttributeName: "connectionId"
           KeyType: "HASH"
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
-      TableName: !Ref TableName
-  
+      TableName: !Sub ${TableName}-${AWS::StackName}
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+          - IndexName: 'userGSI'
+            KeySchema:
+                - AttributeName: 'userId'
+                  KeyType: 'HASH'
+            Projection:
+                ProjectionType: 'ALL'  
   #LAMBDA
   AuthorizerFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: auth/
       Handler: app.handler
-      MemorySize: 128
+      MemorySize: 256
       Runtime: nodejs8.10
+      Environment:
+        Variables:
+          COGNITO_USERPOOLID: eu-west-1_xxxxxxxxxx #NOTE: set your cognito userpool id
+          COGNITO_APPCLIENT: 1t1a1sqj2u33itbquxxxxxxx #NOTE: set your appclient for cognito which was used for getting JWD ID Token
   OnConnectFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -165,10 +154,10 @@ Resources:
       Runtime: nodejs8.10
       Environment:
         Variables:
-          TABLE_NAME: !Ref TableName
+          TABLE_NAME: !Ref ConnectionsTable
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref TableName
+            TableName: !Ref ConnectionsTable
   OnConnectPermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -187,10 +176,10 @@ Resources:
       Runtime: nodejs8.10
       Environment:
         Variables:
-          TABLE_NAME: !Ref TableName
+          TABLE_NAME: !Ref ConnectionsTable
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref TableName
+            TableName: !Ref ConnectionsTable
   OnDisconnectPermission:
     Type: AWS::Lambda::Permission
     DependsOn:
@@ -200,10 +189,10 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref OnDisconnectFunction
       Principal: apigateway.amazonaws.com
-  SendMessageFunction:
+  SendToUserFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: sendmessage/
+      CodeUri: sendToUser/
       Handler: app.handler
       MemorySize: 128
       Timeout: 10
@@ -216,25 +205,16 @@ Resources:
             BatchSize: 10
       Environment:
         Variables:
-          TABLE_NAME: !Ref TableName
+          TABLE_NAME: !Ref ConnectionsTable
       Policies:
       - DynamoDBCrudPolicy:
-          TableName: !Ref TableName
+          TableName: !Ref ConnectionsTable
       - Statement:
         - Effect: Allow
           Action:
           - 'execute-api:ManageConnections'
           Resource:
           - 'arn:aws:execute-api:*:*:*/@connections/*'
-  SendMessagePermission:
-    Type: AWS::Lambda::Permission
-    DependsOn:
-      - PushWebSocket
-      - SendMessageFunction
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref SendMessageFunction
-      Principal: apigateway.amazonaws.com
   PushSqsQueue:
     Type: AWS::SQS::Queue
     Properties: 
@@ -263,9 +243,17 @@ Outputs:
     Description: "OnDisconnect function ARN"
     Value: !GetAtt OnDisconnectFunction.Arn
 
-  SendMessageFunctionArn:
-    Description: "SendMessage function ARN"
-    Value: !GetAtt SendMessageFunction.Arn
+  SendToUserFunctionArn:
+    Description: "SendToUser function ARN"
+    Value: !GetAtt SendToUserFunction.Arn
+
+  PushSqsQueueName:
+    Description: "Push queue name"
+    Value: !Ref PushSqsQueue
+
+  PushSqsQueueArn:
+    Description: "Push Queue  ARN"
+    Value: !GetAtt PushSqsQueue.Arn
 
   WebSocketURI:
     Description: "The WSS Protocol URI to connect to"
