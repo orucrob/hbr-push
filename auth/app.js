@@ -37,7 +37,10 @@ exports.handler = async (event, context) => {
         try {
             let claims = await validateToken(token)
             let resp = generateAllow(claims.sub, event.methodArn)
-            resp.context = claims
+            resp.context = {
+                sub: claims.sub,
+                'cognito:groups': JSON.stringify(claims['cognito:groups'])
+            }
             return resp
         } catch (err) {
             console.log('Token not valid: ' + err)
@@ -49,35 +52,28 @@ exports.handler = async (event, context) => {
 }
 
 // Help function to generate an IAM policy
-var generatePolicy = function(principalId, effect, resource) {
+var generatePolicy = function (principalId, effect, resource) {
     // Required output:
     var authResponse = {}
     authResponse.principalId = principalId
     if (effect && resource) {
         var policyDocument = {}
         policyDocument.Version = '2012-10-17' // default version
-        policyDocument.Statement = []
         var statementOne = {}
         statementOne.Action = 'execute-api:Invoke' // default action
         statementOne.Effect = effect
         statementOne.Resource = resource
-        policyDocument.Statement[0] = statementOne
+        policyDocument.Statement = [statementOne]
         authResponse.policyDocument = policyDocument
-    }
-    // Optional output with custom properties of the String, Number or Boolean type.
-    authResponse.context = {
-        stringKey: 'stringval',
-        numberKey: 123,
-        booleanKey: true
     }
     return authResponse
 }
 
-var generateAllow = function(principalId, resource) {
+var generateAllow = function (principalId, resource) {
     return generatePolicy(principalId, 'Allow', resource)
 }
 
-var generateDeny = function(principalId, resource) {
+var generateDeny = function (principalId, resource) {
     return generatePolicy(principalId, 'Deny', resource)
 }
 
@@ -88,9 +84,9 @@ const getPublicKeys = () => {
         if (keysMap) {
             resolve(keysMap)
         } else {
-            https.get(keys_url, function(response) {
+            https.get(keys_url, function (response) {
                 if (response.statusCode == 200) {
-                    response.on('data', function(body) {
+                    response.on('data', function (body) {
                         keysMap = {}
                         let keys = JSON.parse(body)['keys']
 
@@ -143,7 +139,6 @@ const validateToken = async token => {
         ) {
             throw new Error('Token was not issued for this audience')
         }
-
         return claims
     } else {
         throw new Error('No key for kid.')
